@@ -7,6 +7,8 @@ Code-first calorie counter with AI meal analysis.
 - One-time secret access code generation and code-based login.
 - User mode: upload food photo from phone camera and estimate dish, calories, protein, fiber, nutrients, and chemicals.
 - Manual mode: use Perplexity web UI, then paste JSON output to parse/store.
+- API-key mode in UI: save your provider keys in browser and analyze photos without manual JSON paste.
+- Web-login mode: `provider=perplexity_web` uses headless Playwright with persisted session state.
 - Optional free-model path via OpenRouter vision models.
 - Meal history + 7-day summary from SQLite.
 - Admin interface for user stats, code reset, and user deletion.
@@ -86,6 +88,23 @@ python -m backend.scripts.bootstrap \
 - Writes/updates those values in `backend/.env` when `--env-file` is provided.
 - Prints one-time user access codes for each created user.
 
+## Perplexity Web Login Automation
+1) Install backend dependencies and Chromium browser:
+```bash
+cd /Users/venkatasai/Desktop/codex/calorie_counter_app
+pip install -r backend/requirements.txt
+python -m playwright install chromium
+```
+
+2) Create a logged-in Perplexity session state once:
+```bash
+python -m backend.scripts.perplexity_web_login \
+  --storage-state backend/data/perplexity_storage_state.json
+```
+
+3) Set `PERPLEXITY_WEB_STORAGE_STATE_PATH` in `backend/.env` and use provider
+`Perplexity Web (headless session)` in UI.
+
 ## Heroku Container Deploy
 ### 1) Set app stack to container
 ```bash
@@ -117,3 +136,4 @@ git push heroku main
 - Access codes are stored as hashes in SQLite, not plaintext.
 - Admin reset reveals a new code once; share it with the user immediately.
 - API endpoints include in-memory IP rate limiting and security headers by default.
+- Direct cookie/session-token extraction from `perplexity.ai` is not supported by browser security boundaries; use API-key mode for automatic analysis.

@@ -29,6 +29,8 @@ type Notice = {
 };
 
 const STORAGE_KEY = "cc_access_code";
+const PERPLEXITY_KEY_STORAGE = "cc_perplexity_api_key";
+const OPENROUTER_KEY_STORAGE = "cc_openrouter_api_key";
 
 const MANUAL_PROMPT = `Analyze this food image and return strict JSON only with keys:
 - dish
@@ -49,9 +51,14 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [newCode, setNewCode] = useState<string | null>(null);
 
-  const [provider, setProvider] = useState<"perplexity" | "openrouter" | "manual">(
+  const [provider, setProvider] = useState<
+    "perplexity" | "openrouter" | "perplexity_web" | "manual"
+  >(
     "perplexity",
   );
+  const [perplexityApiKey, setPerplexityApiKey] = useState("");
+  const [openrouterApiKey, setOpenrouterApiKey] = useState("");
+  const [showProviderKeys, setShowProviderKeys] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [manualText, setManualText] = useState("");
   const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null);
@@ -63,6 +70,16 @@ export default function Home() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
+    const savedPerplexityKey = window.localStorage.getItem(PERPLEXITY_KEY_STORAGE);
+    const savedOpenrouterKey = window.localStorage.getItem(OPENROUTER_KEY_STORAGE);
+
+    if (savedPerplexityKey) {
+      setPerplexityApiKey(savedPerplexityKey);
+    }
+    if (savedOpenrouterKey) {
+      setOpenrouterApiKey(savedOpenrouterKey);
+    }
+
     if (!saved) {
       return;
     }
@@ -180,7 +197,16 @@ export default function Home() {
     setLoading(true);
     setNotice(null);
     try {
-      const result = await analyzePhoto(accessCode, imageFile, provider, true);
+      const result = await analyzePhoto(
+        accessCode,
+        imageFile,
+        provider,
+        {
+          perplexityApiKey,
+          openrouterApiKey,
+        },
+        true,
+      );
       setAnalysis(result);
       await refreshUserData(accessCode);
       setImageFile(null);
@@ -296,6 +322,15 @@ export default function Home() {
     setNotice({ type: "info", text: "Prompt copied." });
   }
 
+  function handleSaveProviderKeys() {
+    window.localStorage.setItem(PERPLEXITY_KEY_STORAGE, perplexityApiKey.trim());
+    window.localStorage.setItem(OPENROUTER_KEY_STORAGE, openrouterApiKey.trim());
+    setNotice({
+      type: "success",
+      text: "Provider keys saved in this browser for automatic analysis.",
+    });
+  }
+
   return (
     <div className="page">
       <header className="hero">
@@ -398,9 +433,51 @@ export default function Home() {
                 onChange={(event) => setProvider(event.target.value as typeof provider)}
               >
                 <option value="perplexity">Perplexity API</option>
+                <option value="perplexity_web">Perplexity Web (headless session)</option>
                 <option value="openrouter">OpenRouter free vision model</option>
                 <option value="manual">Perplexity web manual paste</option>
               </select>
+
+              <div className="provider-settings">
+                <button
+                  className="ghost"
+                  onClick={() => setShowProviderKeys((current) => !current)}
+                >
+                  {showProviderKeys ? "Hide provider keys" : "Add provider keys"}
+                </button>
+                <p className="small">
+                  For the `Perplexity Web (headless session)` mode, backend uses a Playwright
+                  browser session. Configure `PERPLEXITY_WEB_*` env vars server-side.
+                </p>
+                {showProviderKeys && (
+                  <div className="manual-block">
+                    <label className="field-label" htmlFor="perplexity-key">
+                      Perplexity API Key
+                    </label>
+                    <input
+                      id="perplexity-key"
+                      type="password"
+                      value={perplexityApiKey}
+                      onChange={(event) => setPerplexityApiKey(event.target.value)}
+                      placeholder="pplx-..."
+                    />
+
+                    <label className="field-label" htmlFor="openrouter-key">
+                      OpenRouter API Key (optional)
+                    </label>
+                    <input
+                      id="openrouter-key"
+                      type="password"
+                      value={openrouterApiKey}
+                      onChange={(event) => setOpenrouterApiKey(event.target.value)}
+                      placeholder="sk-or-..."
+                    />
+                    <button className="ghost" onClick={handleSaveProviderKeys}>
+                      Save keys in browser
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {provider !== "manual" && (
                 <>
@@ -503,7 +580,8 @@ export default function Home() {
                     <div>
                       <h3>{entry.dish}</h3>
                       <p className="small">
-                        {new Date(entry.eaten_at).toLocaleString()} · {entry.source}
+                        {new Date(entry.eaten_at).toLocaleString()} · {entry.source} ·{" "}
+                        {entry.meal_type}
                       </p>
                       <p className="small">
                         {entry.calories_kcal ?? "N/A"} kcal · {entry.protein_g ?? "N/A"} g protein ·{" "}

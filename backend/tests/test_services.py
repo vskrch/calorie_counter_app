@@ -149,6 +149,30 @@ def test_analyze_openrouter_without_key(monkeypatch: pytest.MonkeyPatch) -> None
         services.analyze_image(b"abc", provider="openrouter")
 
 
+def test_analyze_perplexity_web_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_web(image_bytes: bytes) -> dict[str, Any]:
+        assert image_bytes == b"abc"
+        return {
+            "dish": "Bowl",
+            "meal_type": "lunch",
+            "calories_kcal": 410,
+            "protein_g": 20,
+            "fiber_g": 6,
+            "confidence_score": 0.81,
+            "nutrients": ["iron"],
+            "chemicals": [],
+            "notes": None,
+            "source": "perplexity_web",
+            "model": "perplexity-web",
+            "raw": "{}",
+        }
+
+    monkeypatch.setattr(services, "_analyze_with_perplexity_web", fake_web)
+    result = services.analyze_image(b"abc", provider="perplexity_web")
+    assert result["source"] == "perplexity_web"
+    assert result["dish"] == "Bowl"
+
+
 def test_analyze_perplexity_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PERPLEXITY_API_KEY", "key")
 

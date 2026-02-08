@@ -223,6 +223,14 @@ button.ghost.danger {
   gap: 0.5rem;
 }
 
+.provider-settings {
+  margin-top: 0.6rem;
+  padding: 0.7rem;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .small {
   font-size: 0.88rem;
   color: var(--muted);

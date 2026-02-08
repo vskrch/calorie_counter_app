@@ -30,6 +30,7 @@ from .services import (
     admin_overview,
     analyze_image,
     analyze_manual,
+    count_entries,
     create_entry,
     create_user,
     delete_entry,
@@ -152,11 +153,24 @@ def profile(access_code: str = Header(..., alias="X-Access-Code")) -> UserSummar
 @app.get("/api/meals", response_model=MealListResponse)
 def meals(
     limit: int = Query(default=30, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    meal_type: str | None = Query(default=None),
     access_code: str = Header(..., alias="X-Access-Code"),
 ) -> MealListResponse:
     user = _require_user(access_code)
-    entries = [MealEntry(**entry) for entry in list_entries(user["id"], limit)]
-    return MealListResponse(entries=entries)
+    entries_raw = list_entries(
+        user["id"],
+        limit=limit,
+        offset=offset,
+        query=q,
+        source=source,
+        meal_type=meal_type,
+    )
+    entries = [MealEntry(**entry) for entry in entries_raw]
+    total = count_entries(user["id"], query=q, source=source, meal_type=meal_type)
+    return MealListResponse(entries=entries, total=total, limit=limit, offset=offset)
 
 
 @app.get("/api/summary", response_model=SummaryResponse)
@@ -186,6 +200,8 @@ async def analyze_photo(
     provider: str = Form(default="perplexity"),
     save_entry: bool = Form(default=True),
     access_code: str = Header(..., alias="X-Access-Code"),
+    perplexity_api_key: str | None = Header(default=None, alias="X-Perplexity-Api-Key"),
+    openrouter_api_key: str | None = Header(default=None, alias="X-Openrouter-Api-Key"),
 ) -> ImageAnalysisResult:
     user = _require_user(access_code)
     image_bytes = await image.read()
@@ -193,7 +209,12 @@ async def analyze_photo(
         raise HTTPException(status_code=400, detail="Image is empty")
 
     try:
-        result = analyze_image(image_bytes=image_bytes, provider=provider)
+        result = analyze_image(
+            image_bytes=image_bytes,
+            provider=provider,
+            perplexity_api_key=perplexity_api_key,
+            openrouter_api_key=openrouter_api_key,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -212,6 +233,8 @@ async def analyze_photo(
             nutrients=result["nutrients"],
             chemicals=result["chemicals"],
             notes=result["notes"],
+            meal_type=result.get("meal_type", "other"),
+            confidence_score=result.get("confidence_score"),
         )
 
     return ImageAnalysisResult(**result)
@@ -236,6 +259,8 @@ def analyze_from_text(
             nutrients=result["nutrients"],
             chemicals=result["chemicals"],
             notes=result["notes"],
+            meal_type=result.get("meal_type", payload.meal_type),
+            confidence_score=result.get("confidence_score"),
         )
 
     return ImageAnalysisResult(**result)

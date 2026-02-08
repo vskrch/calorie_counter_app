@@ -105,13 +105,15 @@ def test_photo_analysis_flow(client, monkeypatch: pytest.MonkeyPatch) -> None:
 
     import backend.app.main as main
 
-    def fake_analyze(image_bytes: bytes, provider: str) -> dict[str, Any]:
+    def fake_analyze(image_bytes: bytes, provider: str, **_: Any) -> dict[str, Any]:
         assert image_bytes
         return {
             "dish": "Burger",
+            "meal_type": "lunch",
             "calories_kcal": 700,
             "protein_g": 30,
             "fiber_g": 3,
+            "confidence_score": 0.9,
             "nutrients": ["B12"],
             "chemicals": ["sodium"],
             "notes": "estimate",
@@ -137,7 +139,7 @@ def test_photo_analysis_errors(client, monkeypatch: pytest.MonkeyPatch) -> None:
 
     import backend.app.main as main
 
-    def bad_provider(image_bytes: bytes, provider: str) -> dict[str, Any]:
+    def bad_provider(image_bytes: bytes, provider: str, **_: Any) -> dict[str, Any]:
         assert image_bytes
         assert provider == "bad"
         raise ValueError("Unsupported provider")
@@ -152,7 +154,7 @@ def test_photo_analysis_errors(client, monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert response.status_code == 400
 
-    def runtime_fail(image_bytes: bytes, provider: str) -> dict[str, Any]:
+    def runtime_fail(image_bytes: bytes, provider: str, **_: Any) -> dict[str, Any]:
         assert image_bytes
         assert provider == "perplexity"
         raise RuntimeError("missing key")
@@ -166,7 +168,7 @@ def test_photo_analysis_errors(client, monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert response.status_code == 400
 
-    def unknown_fail(image_bytes: bytes, provider: str) -> dict[str, Any]:
+    def unknown_fail(image_bytes: bytes, provider: str, **_: Any) -> dict[str, Any]:
         assert image_bytes
         assert provider == "perplexity"
         raise Exception("bad gateway")

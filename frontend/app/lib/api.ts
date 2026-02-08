@@ -18,9 +18,11 @@ export type SessionResponse = {
 
 export type ImageAnalysisResult = {
   dish: string;
+  meal_type: string;
   calories_kcal: number | null;
   protein_g: number | null;
   fiber_g: number | null;
+  confidence_score: number | null;
   nutrients: string[];
   chemicals: string[];
   notes: string | null;
@@ -34,14 +36,17 @@ export type MealEntry = {
   user_id: number;
   source: string;
   dish: string;
+  meal_type: string;
   calories_kcal: number | null;
   protein_g: number | null;
   fiber_g: number | null;
+  confidence_score: number | null;
   nutrients: string[];
   chemicals: string[];
   notes: string | null;
   eaten_at: string;
   created_at: string;
+  updated_at: string;
 };
 
 export type SummaryResponse = {
@@ -116,9 +121,12 @@ export function getProfile(code: string) {
 }
 
 export function getMeals(code: string, limit = 30) {
-  return apiFetch<{ entries: MealEntry[] }>(`/api/meals?limit=${limit}`, {
-    headers: { "X-Access-Code": code },
-  });
+  return apiFetch<{ entries: MealEntry[]; total: number; limit: number; offset: number }>(
+    `/api/meals?limit=${limit}`,
+    {
+      headers: { "X-Access-Code": code },
+    },
+  );
 }
 
 export function getSummary(code: string, days = 7) {
@@ -137,7 +145,11 @@ export function deleteMeal(code: string, entryId: number) {
 export async function analyzePhoto(
   code: string,
   file: File,
-  provider: "perplexity" | "openrouter",
+  provider: "perplexity" | "openrouter" | "perplexity_web",
+  keys?: {
+    perplexityApiKey?: string;
+    openrouterApiKey?: string;
+  },
   saveEntry = true,
 ) {
   const form = new FormData();
@@ -145,9 +157,17 @@ export async function analyzePhoto(
   form.append("provider", provider);
   form.append("save_entry", String(saveEntry));
 
+  const headers: Record<string, string> = { "X-Access-Code": code };
+  if (keys?.perplexityApiKey?.trim()) {
+    headers["X-Perplexity-Api-Key"] = keys.perplexityApiKey.trim();
+  }
+  if (keys?.openrouterApiKey?.trim()) {
+    headers["X-Openrouter-Api-Key"] = keys.openrouterApiKey.trim();
+  }
+
   const response = await fetch(`${API_BASE}/api/analyze/photo`, {
     method: "POST",
-    headers: { "X-Access-Code": code },
+    headers,
     body: form,
   });
 
