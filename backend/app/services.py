@@ -646,6 +646,8 @@ def analyze_image(
     *,
     perplexity_api_key: str | None = None,
     openrouter_api_key: str | None = None,
+    perplexity_web_email: str | None = None,
+    perplexity_web_password: str | None = None,
 ) -> dict[str, Any]:
     clean_provider = provider.strip().lower() if provider else "perplexity"
     if clean_provider == "perplexity":
@@ -653,7 +655,11 @@ def analyze_image(
     if clean_provider == "openrouter":
         return _analyze_with_openrouter(image_bytes, api_key_override=openrouter_api_key)
     if clean_provider == "perplexity_web":
-        return _analyze_with_perplexity_web(image_bytes)
+        return _analyze_with_perplexity_web(
+            image_bytes,
+            email_override=perplexity_web_email,
+            password_override=perplexity_web_password,
+        )
     raise ValueError("Unsupported provider")
 
 
@@ -748,7 +754,12 @@ def _analyze_with_openrouter(
     return structured
 
 
-def _analyze_with_perplexity_web(image_bytes: bytes) -> dict[str, Any]:
+def _analyze_with_perplexity_web(
+    image_bytes: bytes,
+    *,
+    email_override: str | None = None,
+    password_override: str | None = None,
+) -> dict[str, Any]:
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
@@ -776,8 +787,8 @@ def _analyze_with_perplexity_web(image_bytes: bytes) -> dict[str, Any]:
     )
     storage_path.parent.mkdir(parents=True, exist_ok=True)
 
-    email = (os.getenv("PERPLEXITY_WEB_EMAIL") or "").strip()
-    password = (os.getenv("PERPLEXITY_WEB_PASSWORD") or "").strip()
+    email = (email_override or os.getenv("PERPLEXITY_WEB_EMAIL") or "").strip()
+    password = (password_override or os.getenv("PERPLEXITY_WEB_PASSWORD") or "").strip()
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
         tmp_file.write(image_bytes)

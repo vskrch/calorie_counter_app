@@ -202,6 +202,8 @@ async def analyze_photo(
     access_code: str = Header(..., alias="X-Access-Code"),
     perplexity_api_key: str | None = Header(default=None, alias="X-Perplexity-Api-Key"),
     openrouter_api_key: str | None = Header(default=None, alias="X-Openrouter-Api-Key"),
+    perplexity_web_email: str | None = Header(default=None, alias="X-Perplexity-Web-Email"),
+    perplexity_web_password: str | None = Header(default=None, alias="X-Perplexity-Web-Password"),
 ) -> ImageAnalysisResult:
     user = _require_user(access_code)
     image_bytes = await image.read()
@@ -214,6 +216,8 @@ async def analyze_photo(
             provider=provider,
             perplexity_api_key=perplexity_api_key,
             openrouter_api_key=openrouter_api_key,
+            perplexity_web_email=perplexity_web_email,
+            perplexity_web_password=perplexity_web_password,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

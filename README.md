@@ -105,6 +105,10 @@ python -m backend.scripts.perplexity_web_login \
 3) Set `PERPLEXITY_WEB_STORAGE_STATE_PATH` in `backend/.env` and use provider
 `Perplexity Web (headless session)` in UI.
 
+Alternative (no pre-login step):
+- In the UI provider settings, enter `Perplexity Web Email` and `Perplexity Web Password`.
+- The backend will perform headless login and persist session state automatically.
+
 ## Heroku Container Deploy
 ### 1) Set app stack to container
 ```bash

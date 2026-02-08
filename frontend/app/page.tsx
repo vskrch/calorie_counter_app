@@ -31,6 +31,7 @@ type Notice = {
 const STORAGE_KEY = "cc_access_code";
 const PERPLEXITY_KEY_STORAGE = "cc_perplexity_api_key";
 const OPENROUTER_KEY_STORAGE = "cc_openrouter_api_key";
+const PERPLEXITY_WEB_EMAIL_STORAGE = "cc_perplexity_web_email";
 
 const MANUAL_PROMPT = `Analyze this food image and return strict JSON only with keys:
 - dish
@@ -58,6 +59,8 @@ export default function Home() {
   );
   const [perplexityApiKey, setPerplexityApiKey] = useState("");
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
+  const [perplexityWebEmail, setPerplexityWebEmail] = useState("");
+  const [perplexityWebPassword, setPerplexityWebPassword] = useState("");
   const [showProviderKeys, setShowProviderKeys] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [manualText, setManualText] = useState("");
@@ -72,12 +75,16 @@ export default function Home() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     const savedPerplexityKey = window.localStorage.getItem(PERPLEXITY_KEY_STORAGE);
     const savedOpenrouterKey = window.localStorage.getItem(OPENROUTER_KEY_STORAGE);
+    const savedPerplexityWebEmail = window.localStorage.getItem(PERPLEXITY_WEB_EMAIL_STORAGE);
 
     if (savedPerplexityKey) {
       setPerplexityApiKey(savedPerplexityKey);
     }
     if (savedOpenrouterKey) {
       setOpenrouterApiKey(savedOpenrouterKey);
+    }
+    if (savedPerplexityWebEmail) {
+      setPerplexityWebEmail(savedPerplexityWebEmail);
     }
 
     if (!saved) {
@@ -204,6 +211,8 @@ export default function Home() {
         {
           perplexityApiKey,
           openrouterApiKey,
+          perplexityWebEmail,
+          perplexityWebPassword,
         },
         true,
       );
@@ -325,6 +334,7 @@ export default function Home() {
   function handleSaveProviderKeys() {
     window.localStorage.setItem(PERPLEXITY_KEY_STORAGE, perplexityApiKey.trim());
     window.localStorage.setItem(OPENROUTER_KEY_STORAGE, openrouterApiKey.trim());
+    window.localStorage.setItem(PERPLEXITY_WEB_EMAIL_STORAGE, perplexityWebEmail.trim());
     setNotice({
       type: "success",
       text: "Provider keys saved in this browser for automatic analysis.",
@@ -475,6 +485,28 @@ export default function Home() {
                     <button className="ghost" onClick={handleSaveProviderKeys}>
                       Save keys in browser
                     </button>
+
+                    <label className="field-label" htmlFor="perplexity-web-email">
+                      Perplexity Web Email (for headless login)
+                    </label>
+                    <input
+                      id="perplexity-web-email"
+                      type="email"
+                      value={perplexityWebEmail}
+                      onChange={(event) => setPerplexityWebEmail(event.target.value)}
+                      placeholder="you@example.com"
+                    />
+
+                    <label className="field-label" htmlFor="perplexity-web-password">
+                      Perplexity Web Password (not stored unless your browser keeps form state)
+                    </label>
+                    <input
+                      id="perplexity-web-password"
+                      type="password"
+                      value={perplexityWebPassword}
+                      onChange={(event) => setPerplexityWebPassword(event.target.value)}
+                      placeholder="Your Perplexity password"
+                    />
                   </div>
                 )}
               </div>

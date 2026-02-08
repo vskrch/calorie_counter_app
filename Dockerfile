@@ -9,9 +9,11 @@ FROM python:3.11-slim AS backend
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN python -m playwright install --with-deps chromium
 
 COPY backend ./backend
 COPY --from=frontend /app/frontend/out ./backend/app/static

@@ -150,7 +150,7 @@ def test_analyze_openrouter_without_key(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_analyze_perplexity_web_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_web(image_bytes: bytes) -> dict[str, Any]:
+    def fake_web(image_bytes: bytes, **_: Any) -> dict[str, Any]:
         assert image_bytes == b"abc"
         return {
             "dish": "Bowl",

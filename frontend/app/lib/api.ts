@@ -149,6 +149,8 @@ export async function analyzePhoto(
   keys?: {
     perplexityApiKey?: string;
     openrouterApiKey?: string;
+    perplexityWebEmail?: string;
+    perplexityWebPassword?: string;
   },
   saveEntry = true,
 ) {
@@ -163,6 +165,12 @@ export async function analyzePhoto(
   }
   if (keys?.openrouterApiKey?.trim()) {
     headers["X-Openrouter-Api-Key"] = keys.openrouterApiKey.trim();
+  }
+  if (keys?.perplexityWebEmail?.trim()) {
+    headers["X-Perplexity-Web-Email"] = keys.perplexityWebEmail.trim();
+  }
+  if (keys?.perplexityWebPassword?.trim()) {
+    headers["X-Perplexity-Web-Password"] = keys.perplexityWebPassword.trim();
   }
 
   const response = await fetch(`${API_BASE}/api/analyze/photo`, {
