@@ -26,6 +26,8 @@ MEAL_TYPE_ALIASES = {
     "supper": "dinner",
 }
 
+PROVIDER_PERPLEXITY_WEB = "perplexity_web"
+
 
 def _read_float_env(name: str, default: float) -> float:
     raw = os.getenv(name)
@@ -640,26 +642,161 @@ def admin_top_dishes(days: int, limit: int) -> list[dict[str, Any]]:
     ]
 
 
+def get_provider_session(provider: str) -> dict[str, Any] | None:
+    clean_provider = (provider or "").strip().lower()
+    if not clean_provider:
+        return None
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT provider, storage_state_json, updated_at
+            FROM provider_sessions
+            WHERE provider = ?
+            """,
+            (clean_provider,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def upsert_provider_session(provider: str, storage_state: dict[str, Any]) -> dict[str, Any]:
+    clean_provider = (provider or "").strip().lower()
+    if not clean_provider:
+        raise ValueError("Provider is required")
+    updated_at = now_iso()
+    payload = json.dumps(storage_state, separators=(",", ":"), ensure_ascii=True)
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO provider_sessions (provider, storage_state_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(provider) DO UPDATE SET
+                storage_state_json = excluded.storage_state_json,
+                updated_at = excluded.updated_at
+            """,
+            (clean_provider, payload, updated_at),
+        )
+        connection.commit()
+    return {"provider": clean_provider, "updated_at": updated_at}
+
+
+def delete_provider_session(provider: str) -> bool:
+    clean_provider = (provider or "").strip().lower()
+    if not clean_provider:
+        return False
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "DELETE FROM provider_sessions WHERE provider = ?",
+            (clean_provider,),
+        )
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def _load_provider_storage_state(provider: str) -> dict[str, Any] | None:
+    session = get_provider_session(provider)
+    if not session:
+        return None
+    raw = (session.get("storage_state_json") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def connect_perplexity_web_session(email: str, password: str) -> dict[str, Any]:
+    clean_email = " ".join((email or "").split()).strip()
+    clean_password = (password or "").strip()
+    if not clean_email:
+        raise ValueError("Email is required")
+    if not clean_password:
+        raise ValueError("Password is required")
+
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:  # pragma: no cover - optional runtime dependency
+        raise RuntimeError(
+            "Playwright is not installed. Install backend dependency and run "
+            "`python -m playwright install chromium`."
+        ) from exc
+
+    timeout_ms = _read_int_env("PERPLEXITY_WEB_TIMEOUT_MS", 120_000, 5_000, 300_000)
+    base_url = (os.getenv("PERPLEXITY_WEB_BASE_URL") or "https://www.perplexity.ai").strip()
+    headless = _read_bool_env("PERPLEXITY_WEB_HEADLESS", default=True)
+
+    storage_path = Path(
+        os.getenv(
+            "PERPLEXITY_WEB_STORAGE_STATE_PATH",
+            str(Path(__file__).resolve().parents[1] / "data" / "perplexity_storage_state.json"),
+        )
+    )
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+    db_storage_state = _load_provider_storage_state(PROVIDER_PERPLEXITY_WEB)
+    file_storage_state: dict[str, Any] | None = None
+    if db_storage_state is None and storage_path.exists():
+        try:
+            file_storage_state = json.loads(storage_path.read_text(encoding="utf-8"))
+        except Exception:
+            file_storage_state = None
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=headless)
+            context_kwargs: dict[str, Any] = {}
+            if db_storage_state is not None:
+                context_kwargs["storage_state"] = db_storage_state
+            elif file_storage_state is not None:
+                context_kwargs["storage_state"] = file_storage_state
+
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
+
+            page.goto(base_url, wait_until="domcontentloaded", timeout=timeout_ms)
+            _dismiss_optional_modals(page)
+            _ensure_perplexity_authenticated(
+                page,
+                email=clean_email,
+                password=clean_password,
+                timeout_ms=timeout_ms,
+            )
+            page.goto(base_url, wait_until="domcontentloaded", timeout=timeout_ms)
+            _dismiss_optional_modals(page)
+
+            storage_state = context.storage_state()
+            result = upsert_provider_session(PROVIDER_PERPLEXITY_WEB, storage_state)
+            try:
+                storage_path.write_text(
+                    json.dumps(storage_state, separators=(",", ":"), ensure_ascii=True),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+
+            context.close()
+            browser.close()
+            return result
+    except PlaywrightTimeoutError as exc:
+        raise RuntimeError("Perplexity web automation timed out.") from exc
+
+
 def analyze_image(
     image_bytes: bytes,
     provider: str,
     *,
     perplexity_api_key: str | None = None,
     openrouter_api_key: str | None = None,
-    perplexity_web_email: str | None = None,
-    perplexity_web_password: str | None = None,
 ) -> dict[str, Any]:
     clean_provider = provider.strip().lower() if provider else "perplexity"
     if clean_provider == "perplexity":
         return _analyze_with_perplexity(image_bytes, api_key_override=perplexity_api_key)
     if clean_provider == "openrouter":
         return _analyze_with_openrouter(image_bytes, api_key_override=openrouter_api_key)
-    if clean_provider == "perplexity_web":
-        return _analyze_with_perplexity_web(
-            image_bytes,
-            email_override=perplexity_web_email,
-            password_override=perplexity_web_password,
-        )
+    if clean_provider == PROVIDER_PERPLEXITY_WEB:
+        return _analyze_with_perplexity_web(image_bytes)
     raise ValueError("Unsupported provider")
 
 
@@ -756,9 +893,6 @@ def _analyze_with_openrouter(
 
 def _analyze_with_perplexity_web(
     image_bytes: bytes,
-    *,
-    email_override: str | None = None,
-    password_override: str | None = None,
 ) -> dict[str, Any]:
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -787,8 +921,16 @@ def _analyze_with_perplexity_web(
     )
     storage_path.parent.mkdir(parents=True, exist_ok=True)
 
-    email = (email_override or os.getenv("PERPLEXITY_WEB_EMAIL") or "").strip()
-    password = (password_override or os.getenv("PERPLEXITY_WEB_PASSWORD") or "").strip()
+    email = (os.getenv("PERPLEXITY_WEB_EMAIL") or "").strip()
+    password = (os.getenv("PERPLEXITY_WEB_PASSWORD") or "").strip()
+
+    db_storage_state = _load_provider_storage_state(PROVIDER_PERPLEXITY_WEB)
+    file_storage_state: dict[str, Any] | None = None
+    if db_storage_state is None and storage_path.exists():
+        try:
+            file_storage_state = json.loads(storage_path.read_text(encoding="utf-8"))
+        except Exception:
+            file_storage_state = None
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
         tmp_file.write(image_bytes)
@@ -798,8 +940,10 @@ def _analyze_with_perplexity_web(
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=headless)
             context_kwargs: dict[str, Any] = {}
-            if storage_path.exists():
-                context_kwargs["storage_state"] = str(storage_path)
+            if db_storage_state is not None:
+                context_kwargs["storage_state"] = db_storage_state
+            elif file_storage_state is not None:
+                context_kwargs["storage_state"] = file_storage_state
 
             context = browser.new_context(**context_kwargs)
             page = context.new_page()
@@ -823,7 +967,15 @@ def _analyze_with_perplexity_web(
             )
             raw = _extract_perplexity_response_text(page, timeout_ms=timeout_ms)
 
-            context.storage_state(path=str(storage_path))
+            storage_state = context.storage_state()
+            upsert_provider_session(PROVIDER_PERPLEXITY_WEB, storage_state)
+            try:
+                storage_path.write_text(
+                    json.dumps(storage_state, separators=(",", ":"), ensure_ascii=True),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
             context.close()
             browser.close()
 
@@ -854,9 +1006,9 @@ def _ensure_perplexity_authenticated(
 
     if not email or not password:
         raise RuntimeError(
-            "Perplexity web login required. Set PERPLEXITY_WEB_EMAIL and "
-            "PERPLEXITY_WEB_PASSWORD, or pre-create PERPLEXITY_WEB_STORAGE_STATE_PATH "
-            "with a logged-in session."
+            "Perplexity web session is not connected or has expired. Ask an admin to "
+            "connect it in the Admin Console, or set PERPLEXITY_WEB_EMAIL and "
+            "PERPLEXITY_WEB_PASSWORD on the server to allow automatic re-login."
         )
 
     _click_first(

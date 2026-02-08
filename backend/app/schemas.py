@@ -169,3 +169,14 @@ class ResetCodeResponse(BaseModel):
 
 class DeleteResponse(BaseModel):
     status: str
+
+
+class ProviderConnectRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class ProviderSessionStatus(BaseModel):
+    provider: str
+    connected: bool
+    updated_at: datetime | None = None

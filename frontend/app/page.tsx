@@ -1,15 +1,19 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import {
+ import {
   AdminOverview,
   AdminUser,
   ImageAnalysisResult,
   MealEntry,
+  ProviderSessionStatus,
   SummaryResponse,
   UserSummary,
+  adminConnectPerplexityWeb,
   adminDeleteUser,
+  adminDisconnectPerplexityWeb,
   adminOverview,
+  adminPerplexityWebStatus,
   adminResetCode,
   adminUsers,
   analyzeManual,
@@ -31,7 +35,6 @@ type Notice = {
 const STORAGE_KEY = "cc_access_code";
 const PERPLEXITY_KEY_STORAGE = "cc_perplexity_api_key";
 const OPENROUTER_KEY_STORAGE = "cc_openrouter_api_key";
-const PERPLEXITY_WEB_EMAIL_STORAGE = "cc_perplexity_web_email";
 
 const MANUAL_PROMPT = `Analyze this food image and return strict JSON only with keys:
 - dish
@@ -59,8 +62,6 @@ export default function Home() {
   );
   const [perplexityApiKey, setPerplexityApiKey] = useState("");
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
-  const [perplexityWebEmail, setPerplexityWebEmail] = useState("");
-  const [perplexityWebPassword, setPerplexityWebPassword] = useState("");
   const [showProviderKeys, setShowProviderKeys] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [manualText, setManualText] = useState("");
@@ -70,21 +71,21 @@ export default function Home() {
 
   const [adminOverviewData, setAdminOverviewData] = useState<AdminOverview | null>(null);
   const [adminUsersData, setAdminUsersData] = useState<AdminUser[]>([]);
+  const [perplexityWebStatus, setPerplexityWebStatus] =
+    useState<ProviderSessionStatus | null>(null);
+  const [perplexityConnectEmail, setPerplexityConnectEmail] = useState("");
+  const [perplexityConnectPassword, setPerplexityConnectPassword] = useState("");
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     const savedPerplexityKey = window.localStorage.getItem(PERPLEXITY_KEY_STORAGE);
     const savedOpenrouterKey = window.localStorage.getItem(OPENROUTER_KEY_STORAGE);
-    const savedPerplexityWebEmail = window.localStorage.getItem(PERPLEXITY_WEB_EMAIL_STORAGE);
 
     if (savedPerplexityKey) {
       setPerplexityApiKey(savedPerplexityKey);
     }
     if (savedOpenrouterKey) {
       setOpenrouterApiKey(savedOpenrouterKey);
-    }
-    if (savedPerplexityWebEmail) {
-      setPerplexityWebEmail(savedPerplexityWebEmail);
     }
 
     if (!saved) {
@@ -151,6 +152,7 @@ export default function Home() {
       setSummary(null);
       setAdminUsersData([]);
       setAdminOverviewData(null);
+      setPerplexityWebStatus(null);
       window.localStorage.removeItem(STORAGE_KEY);
       setNotice({
         type: "error",
@@ -171,12 +173,14 @@ export default function Home() {
   }
 
   async function refreshAdmin(code: string) {
-    const [overviewData, usersData] = await Promise.all([
+    const [overviewData, usersData, providerStatus] = await Promise.all([
       adminOverview(code),
       adminUsers(code),
+      adminPerplexityWebStatus(code),
     ]);
     setAdminOverviewData(overviewData);
     setAdminUsersData(usersData);
+    setPerplexityWebStatus(providerStatus);
   }
 
   async function handleRegister() {
@@ -211,8 +215,6 @@ export default function Home() {
         {
           perplexityApiKey,
           openrouterApiKey,
-          perplexityWebEmail,
-          perplexityWebPassword,
         },
         true,
       );
@@ -318,6 +320,9 @@ export default function Home() {
     setSummary(null);
     setAdminOverviewData(null);
     setAdminUsersData([]);
+    setPerplexityWebStatus(null);
+    setPerplexityConnectEmail("");
+    setPerplexityConnectPassword("");
     setNotice({ type: "info", text: "Logged out." });
     window.localStorage.removeItem(STORAGE_KEY);
   }
@@ -334,11 +339,58 @@ export default function Home() {
   function handleSaveProviderKeys() {
     window.localStorage.setItem(PERPLEXITY_KEY_STORAGE, perplexityApiKey.trim());
     window.localStorage.setItem(OPENROUTER_KEY_STORAGE, openrouterApiKey.trim());
-    window.localStorage.setItem(PERPLEXITY_WEB_EMAIL_STORAGE, perplexityWebEmail.trim());
     setNotice({
       type: "success",
       text: "Provider keys saved in this browser for automatic analysis.",
     });
+  }
+
+  async function handleAdminConnectPerplexityWeb() {
+    if (!accessCode) {
+      return;
+    }
+    if (!perplexityConnectEmail.trim() || !perplexityConnectPassword.trim()) {
+      setNotice({ type: "error", text: "Email and password are required." });
+      return;
+    }
+
+    setLoading(true);
+    setNotice(null);
+    try {
+      const status = await adminConnectPerplexityWeb(
+        accessCode,
+        perplexityConnectEmail.trim(),
+        perplexityConnectPassword,
+      );
+      setPerplexityWebStatus(status);
+      setPerplexityConnectPassword("");
+      setNotice({ type: "success", text: "Perplexity Web session connected." });
+    } catch (error) {
+      setNotice({ type: "error", text: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdminDisconnectPerplexityWeb() {
+    if (!accessCode) {
+      return;
+    }
+    if (!window.confirm("Disconnect the Perplexity Web session?")) {
+      return;
+    }
+
+    setLoading(true);
+    setNotice(null);
+    try {
+      await adminDisconnectPerplexityWeb(accessCode);
+      await refreshAdmin(accessCode);
+      setNotice({ type: "info", text: "Perplexity Web session disconnected." });
+    } catch (error) {
+      setNotice({ type: "error", text: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -402,7 +454,7 @@ export default function Home() {
 
       {mode === "user" && user && (
         <>
-          <section className="grid stat-grid">
+	          <section className="grid stat-grid">
             <article className="panel compact">
               <h3>7-day Calories</h3>
               <p className="stat">{Math.round(summary?.calories_kcal ?? 0)} kcal</p>
@@ -454,13 +506,13 @@ export default function Home() {
                   onClick={() => setShowProviderKeys((current) => !current)}
                 >
                   {showProviderKeys ? "Hide provider keys" : "Add provider keys"}
-                </button>
-                <p className="small">
-                  For the `Perplexity Web (headless session)` mode, backend uses a Playwright
-                  browser session. Configure `PERPLEXITY_WEB_*` env vars server-side.
-                </p>
-                {showProviderKeys && (
-                  <div className="manual-block">
+	                </button>
+	                <p className="small">
+	                  For `Perplexity Web (headless session)`, an admin must connect a server-side
+	                  Playwright session in the Admin Console.
+	                </p>
+	                {showProviderKeys && (
+	                  <div className="manual-block">
                     <label className="field-label" htmlFor="perplexity-key">
                       Perplexity API Key
                     </label>
@@ -482,34 +534,12 @@ export default function Home() {
                       onChange={(event) => setOpenrouterApiKey(event.target.value)}
                       placeholder="sk-or-..."
                     />
-                    <button className="ghost" onClick={handleSaveProviderKeys}>
-                      Save keys in browser
-                    </button>
-
-                    <label className="field-label" htmlFor="perplexity-web-email">
-                      Perplexity Web Email (for headless login)
-                    </label>
-                    <input
-                      id="perplexity-web-email"
-                      type="email"
-                      value={perplexityWebEmail}
-                      onChange={(event) => setPerplexityWebEmail(event.target.value)}
-                      placeholder="you@example.com"
-                    />
-
-                    <label className="field-label" htmlFor="perplexity-web-password">
-                      Perplexity Web Password (not stored unless your browser keeps form state)
-                    </label>
-                    <input
-                      id="perplexity-web-password"
-                      type="password"
-                      value={perplexityWebPassword}
-                      onChange={(event) => setPerplexityWebPassword(event.target.value)}
-                      placeholder="Your Perplexity password"
-                    />
-                  </div>
-                )}
-              </div>
+	                    <button className="ghost" onClick={handleSaveProviderKeys}>
+	                      Save keys in browser
+	                    </button>
+	                  </div>
+	                )}
+	              </div>
 
               {provider !== "manual" && (
                 <>
@@ -646,12 +676,71 @@ export default function Home() {
               <h3>Total Calories</h3>
               <p className="stat">{Math.round(adminOverviewData?.calories_kcal ?? 0)} kcal</p>
             </article>
-          </section>
+	          </section>
 
-          <section className="panel">
-            <div className="panel-head">
-              <h2>User Management</h2>
-              <div className="action-row">
+	          <section className="panel">
+	            <div className="panel-head">
+	              <h2>Perplexity Web Session</h2>
+	              <div className="action-row">
+	                <button className="ghost" onClick={() => refreshAdmin(accessCode)}>
+	                  Refresh
+	                </button>
+	                <button
+	                  className="ghost danger"
+	                  onClick={handleAdminDisconnectPerplexityWeb}
+	                  disabled={!perplexityWebStatus?.connected}
+	                >
+	                  Disconnect
+	                </button>
+	              </div>
+	            </div>
+	            <p className="small">
+	              Status:{" "}
+	              <strong>{perplexityWebStatus?.connected ? "Connected" : "Not connected"}</strong>
+	              {perplexityWebStatus?.updated_at
+	                ? ` · Updated ${new Date(perplexityWebStatus.updated_at).toLocaleString()}`
+	                : ""}
+	            </p>
+	            <div className="manual-block">
+	              <p className="small">
+	                This enables <strong>Perplexity Web (headless session)</strong> analysis without
+	                pasting tokens or JSON. Credentials are used only to establish the session and
+	                are not stored.
+	              </p>
+	              <label className="field-label" htmlFor="pplx-connect-email">
+	                Perplexity Email
+	              </label>
+	              <input
+	                id="pplx-connect-email"
+	                type="email"
+	                value={perplexityConnectEmail}
+	                onChange={(event) => setPerplexityConnectEmail(event.target.value)}
+	                placeholder="you@example.com"
+	              />
+	              <label className="field-label" htmlFor="pplx-connect-password">
+	                Perplexity Password
+	              </label>
+	              <input
+	                id="pplx-connect-password"
+	                type="password"
+	                value={perplexityConnectPassword}
+	                onChange={(event) => setPerplexityConnectPassword(event.target.value)}
+	                placeholder="Your Perplexity password"
+	              />
+	              <button onClick={handleAdminConnectPerplexityWeb} disabled={loading}>
+	                Connect session
+	              </button>
+	              <p className="small">
+	                If Perplexity enforces captcha/2FA, headless login can fail; use the{" "}
+	                <strong>Perplexity API</strong> mode in that case.
+	              </p>
+	            </div>
+	          </section>
+
+	          <section className="panel">
+	            <div className="panel-head">
+	              <h2>User Management</h2>
+	              <div className="action-row">
                 <button className="ghost" onClick={() => refreshAdmin(accessCode)}>
                   Refresh
                 </button>

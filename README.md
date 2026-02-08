@@ -89,6 +89,12 @@ python -m backend.scripts.bootstrap \
 - Prints one-time user access codes for each created user.
 
 ## Perplexity Web Login Automation
+Recommended (no token paste; admin-managed session):
+1) Log in as admin (enter `ADMIN_CODE` in the app).
+2) Open **Perplexity Web Session** and connect using your Perplexity email/password.
+3) In user mode, select `Perplexity Web (headless session)` and analyze photos.
+
+Alternative (CLI bootstrap for local dev):
 1) Install backend dependencies and Chromium browser:
 ```bash
 cd /Users/venkatasai/Desktop/codex/calorie_counter_app
@@ -106,8 +112,7 @@ python -m backend.scripts.perplexity_web_login \
 `Perplexity Web (headless session)` in UI.
 
 Alternative (no pre-login step):
-- In the UI provider settings, enter `Perplexity Web Email` and `Perplexity Web Password`.
-- The backend will perform headless login and persist session state automatically.
+- In the Admin Console, connect a Perplexity Web session (credentials are not stored; session state is).
 
 ## Heroku Container Deploy
 ### 1) Set app stack to container
@@ -140,4 +145,4 @@ git push heroku main
 - Access codes are stored as hashes in SQLite, not plaintext.
 - Admin reset reveals a new code once; share it with the user immediately.
 - API endpoints include in-memory IP rate limiting and security headers by default.
-- Direct cookie/session-token extraction from `perplexity.ai` is not supported by browser security boundaries; use API-key mode for automatic analysis.
+- Extracting cookies from a user's existing browser session is not supported; the app can establish a server-side Playwright session via the Admin Console connect flow or `PERPLEXITY_WEB_*` env vars.

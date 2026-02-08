@@ -62,10 +62,17 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS provider_sessions (
+                provider TEXT PRIMARY KEY,
+                storage_state_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_meal_entries_user_date ON meal_entries(user_id, eaten_at DESC);
             CREATE INDEX IF NOT EXISTS idx_meal_entries_user_dish ON meal_entries(user_id, dish);
             CREATE INDEX IF NOT EXISTS idx_meal_entries_user_type ON meal_entries(user_id, meal_type);
+            CREATE INDEX IF NOT EXISTS idx_provider_sessions_updated_at ON provider_sessions(updated_at DESC);
             """
         )
 

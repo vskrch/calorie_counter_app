@@ -77,6 +77,12 @@ export type ResetCodeResponse = {
   new_code: string;
 };
 
+export type ProviderSessionStatus = {
+  provider: string;
+  connected: boolean;
+  updated_at: string | null;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ?? "";
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -149,8 +155,6 @@ export async function analyzePhoto(
   keys?: {
     perplexityApiKey?: string;
     openrouterApiKey?: string;
-    perplexityWebEmail?: string;
-    perplexityWebPassword?: string;
   },
   saveEntry = true,
 ) {
@@ -165,12 +169,6 @@ export async function analyzePhoto(
   }
   if (keys?.openrouterApiKey?.trim()) {
     headers["X-Openrouter-Api-Key"] = keys.openrouterApiKey.trim();
-  }
-  if (keys?.perplexityWebEmail?.trim()) {
-    headers["X-Perplexity-Web-Email"] = keys.perplexityWebEmail.trim();
-  }
-  if (keys?.perplexityWebPassword?.trim()) {
-    headers["X-Perplexity-Web-Password"] = keys.perplexityWebPassword.trim();
   }
 
   const response = await fetch(`${API_BASE}/api/analyze/photo`, {
@@ -225,6 +223,27 @@ export function adminResetCode(adminCode: string, userId: number) {
 
 export function adminDeleteUser(adminCode: string, userId: number) {
   return apiFetch<{ status: string }>(`/api/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: { "X-Admin-Code": adminCode },
+  });
+}
+
+export function adminPerplexityWebStatus(adminCode: string) {
+  return apiFetch<ProviderSessionStatus>("/api/admin/providers/perplexity_web", {
+    headers: { "X-Admin-Code": adminCode },
+  });
+}
+
+export function adminConnectPerplexityWeb(adminCode: string, email: string, password: string) {
+  return apiFetch<ProviderSessionStatus>("/api/admin/providers/perplexity_web", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Admin-Code": adminCode },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function adminDisconnectPerplexityWeb(adminCode: string) {
+  return apiFetch<{ status: string }>("/api/admin/providers/perplexity_web", {
     method: "DELETE",
     headers: { "X-Admin-Code": adminCode },
   });

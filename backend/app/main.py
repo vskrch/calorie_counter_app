@@ -18,6 +18,8 @@ from .schemas import (
     ManualAnalysisRequest,
     MealEntry,
     MealListResponse,
+    ProviderConnectRequest,
+    ProviderSessionStatus,
     RegisterRequest,
     RegisterResponse,
     ResetCodeResponse,
@@ -31,10 +33,13 @@ from .services import (
     analyze_image,
     analyze_manual,
     count_entries,
+    connect_perplexity_web_session,
     create_entry,
     create_user,
+    delete_provider_session,
     delete_entry,
     delete_user,
+    get_provider_session,
     get_user_by_code,
     list_admin_users,
     list_entries,
@@ -202,8 +207,6 @@ async def analyze_photo(
     access_code: str = Header(..., alias="X-Access-Code"),
     perplexity_api_key: str | None = Header(default=None, alias="X-Perplexity-Api-Key"),
     openrouter_api_key: str | None = Header(default=None, alias="X-Openrouter-Api-Key"),
-    perplexity_web_email: str | None = Header(default=None, alias="X-Perplexity-Web-Email"),
-    perplexity_web_password: str | None = Header(default=None, alias="X-Perplexity-Web-Password"),
 ) -> ImageAnalysisResult:
     user = _require_user(access_code)
     image_bytes = await image.read()
@@ -216,8 +219,6 @@ async def analyze_photo(
             provider=provider,
             perplexity_api_key=perplexity_api_key,
             openrouter_api_key=openrouter_api_key,
-            perplexity_web_email=perplexity_web_email,
-            perplexity_web_password=perplexity_web_password,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -303,6 +304,51 @@ def admin_delete_user(
     removed = delete_user(user_id)
     if not removed:
         raise HTTPException(status_code=404, detail="User not found")
+    return DeleteResponse(status="ok")
+
+
+@app.get("/api/admin/providers/perplexity_web", response_model=ProviderSessionStatus)
+def admin_perplexity_web_status(
+    admin_code: str = Header(..., alias="X-Admin-Code"),
+) -> ProviderSessionStatus:
+    _require_admin(admin_code)
+    session = get_provider_session("perplexity_web")
+    if not session:
+        return ProviderSessionStatus(provider="perplexity_web", connected=False, updated_at=None)
+    return ProviderSessionStatus(
+        provider="perplexity_web",
+        connected=True,
+        updated_at=datetime.fromisoformat(session["updated_at"]),
+    )
+
+
+@app.post("/api/admin/providers/perplexity_web", response_model=ProviderSessionStatus)
+def admin_perplexity_web_connect(
+    payload: ProviderConnectRequest,
+    admin_code: str = Header(..., alias="X-Admin-Code"),
+) -> ProviderSessionStatus:
+    _require_admin(admin_code)
+    try:
+        result = connect_perplexity_web_session(payload.email, payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Provider connect failed: {exc}") from exc
+    return ProviderSessionStatus(
+        provider=result.get("provider", "perplexity_web"),
+        connected=True,
+        updated_at=datetime.fromisoformat(result["updated_at"]),
+    )
+
+
+@app.delete("/api/admin/providers/perplexity_web", response_model=DeleteResponse)
+def admin_perplexity_web_disconnect(
+    admin_code: str = Header(..., alias="X-Admin-Code"),
+) -> DeleteResponse:
+    _require_admin(admin_code)
+    delete_provider_session("perplexity_web")
     return DeleteResponse(status="ok")
 
 
