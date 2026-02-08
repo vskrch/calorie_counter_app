@@ -5,7 +5,7 @@ RUN npm install
 COPY frontend ./
 RUN npm run build
 
-FROM python:3.11-slim AS backend
+FROM mcr.microsoft.com/playwright/python:v1.49.1-jammy AS backend
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -13,7 +13,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
-RUN python -m playwright install --with-deps chromium
+RUN python -m playwright install chromium
 
 COPY backend ./backend
 COPY --from=frontend /app/frontend/out ./backend/app/static
