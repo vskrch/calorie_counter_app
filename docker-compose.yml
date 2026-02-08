@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: calorie-counter
+    env_file:
+      - ./backend/.env
+    environment:
+      APP_DB_PATH: /data/app.db
+      FRONTEND_STATIC_DIR: /app/backend/app/static
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - calorie_data:/data
+    restart: unless-stopped
+
+volumes:
+  calorie_data:
